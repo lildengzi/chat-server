@@ -1,0 +1,87 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: chatdb
+      POSTGRES_PASSWORD: "123456"
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d chatdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - chat-net
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - chat-net
+
+  chat-server-1:
+    build: ./chat-server
+    restart: unless-stopped
+    environment:
+      DB_URL: postgres://postgres:123456@postgres:5432/chatdb?sslmode=disable
+      REDIS_ADDR: redis:6379
+      INSTANCE_ID: server-1
+    expose:
+      - "8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - chat-net
+
+  chat-server-2:
+    build: ./chat-server
+    restart: unless-stopped
+    environment:
+      DB_URL: postgres://postgres:123456@postgres:5432/chatdb?sslmode=disable
+      REDIS_ADDR: redis:6379
+      INSTANCE_ID: server-2
+    expose:
+      - "8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - chat-net
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+    depends_on:
+      - chat-server-1
+      - chat-server-2
+    networks:
+      - chat-net
+
+volumes:
+  pg_data:
+
+networks:
+  chat-net:
+    driver: bridge

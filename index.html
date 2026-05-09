@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Go Chat MVP</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, "Microsoft YaHei", sans-serif;
+      background: #f5f7fb;
+      color: #222;
+    }
+
+    .app {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      width: 320px;
+      padding: 16px;
+      background: #fff;
+      border-right: 1px solid #dcdfe6;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      gap: 12px;
+    }
+
+    .card {
+      background: #fff;
+      border: 1px solid #dcdfe6;
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    h2, h3 {
+      margin: 0 0 12px;
+    }
+
+    .form-group {
+      margin-bottom: 10px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 14px;
+      color: #555;
+    }
+
+    input,
+    button,
+    textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #cfd6e4;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    textarea {
+      resize: none;
+      height: 88px;
+    }
+
+    button {
+      cursor: pointer;
+      background: #1677ff;
+      color: #fff;
+      border: none;
+    }
+
+    button:hover {
+      background: #0958d9;
+    }
+
+    button.secondary {
+      background: #f0f2f5;
+      color: #333;
+      border: 1px solid #d9d9d9;
+    }
+
+    button.secondary:hover {
+      background: #e6e8eb;
+    }
+
+    .users-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .users-header button {
+      width: auto;
+      padding: 8px 12px;
+    }
+
+    .status {
+      padding: 10px;
+      border-radius: 6px;
+      background: #f0f5ff;
+      color: #1d39c4;
+      font-size: 14px;
+      word-break: break-all;
+    }
+
+    .chat-box {
+      flex: 1;
+      min-height: 360px;
+      background: #fff;
+      border: 1px solid #dcdfe6;
+      border-radius: 8px;
+      padding: 12px;
+      overflow-y: auto;
+    }
+
+    .message {
+      padding: 8px 10px;
+      margin-bottom: 8px;
+      border-radius: 6px;
+      background: #f7f8fa;
+      word-break: break-word;
+    }
+
+    .message.system {
+      background: #fffbe6;
+      color: #8c6d1f;
+    }
+
+    .message.error {
+      background: #fff1f0;
+      color: #cf1322;
+    }
+
+    .meta {
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 4px;
+    }
+
+    .user-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      max-height: 260px;
+      overflow-y: auto;
+    }
+
+    .user-list li {
+      padding: 8px 10px;
+      border-bottom: 1px solid #f0f0f0;
+      font-size: 14px;
+    }
+
+    .send-panel {
+      display: flex;
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .send-panel textarea {
+      flex: 1;
+    }
+
+    .send-panel .actions {
+      width: 180px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .tip {
+      font-size: 12px;
+      color: #666;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 900px) {
+      .app {
+        flex-direction: column;
+      }
+
+      .sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid #dcdfe6;
+      }
+
+      .send-panel {
+        flex-direction: column;
+      }
+
+      .send-panel .actions {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="card">
+        <h2>用户操作</h2>
+
+        <div class="form-group">
+          <label for="registerUsername">注册用户名</label>
+          <input id="registerUsername" type="text" placeholder="请输入用户名" />
+        </div>
+
+        <div class="form-group">
+          <label for="registerPassword">注册密码</label>
+          <input id="registerPassword" type="password" placeholder="请输入密码" />
+        </div>
+
+        <button id="registerBtn">注册</button>
+
+        <hr style="margin: 16px 0; border: none; border-top: 1px solid #eee;" />
+
+        <div class="form-group">
+          <label for="loginUsername">登录用户名</label>
+          <input id="loginUsername" type="text" placeholder="请输入用户名" />
+        </div>
+
+        <div class="form-group">
+          <label for="loginPassword">登录密码</label>
+          <input id="loginPassword" type="password" placeholder="请输入密码" />
+        </div>
+
+        <button id="loginBtn">登录</button>
+      </div>
+
+      <div class="card">
+        <div class="users-header">
+          <h3>在线用户</h3>
+          <button id="refreshOnlineBtn" class="secondary">刷新</button>
+        </div>
+        <ul id="onlineUserList" class="user-list"></ul>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div id="statusBox" class="status">未登录</div>
+
+      <div id="chatMessages" class="chat-box"></div>
+
+      <div class="card">
+        <div class="send-panel">
+          <textarea id="messageInput" placeholder="输入 @用户ID 内容，例如：@123 hello"></textarea>
+          <div class="actions">
+            <button id="sendBtn">发送消息</button>
+            <button id="offlineBtn" class="secondary">拉取离线消息</button>
+            <div class="tip">
+              在线列表会自动每 5 秒刷新一次。<br />
+              私聊格式：<code>@用户ID 内容</code>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin;
+    const WS_PROTOCOL = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const WS_BASE = `${WS_PROTOCOL}//${window.location.host}`;
+
+    let ws = null;
+    let currentUser = null;
+    let onlineRefreshTimer = null;
+
+    const statusBox = document.getElementById("statusBox");
+    const chatMessages = document.getElementById("chatMessages");
+    const onlineUserList = document.getElementById("onlineUserList");
+    const messageInput = document.getElementById("messageInput");
+
+    function setStatus(text) {
+      statusBox.textContent = text;
+    }
+
+    function appendMessage(text, type = "") {
+      const item = document.createElement("div");
+      item.className = `message ${type}`.trim();
+
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.textContent = new Date().toLocaleTimeString();
+
+      const body = document.createElement("div");
+      body.textContent = text;
+
+      item.appendChild(meta);
+      item.appendChild(body);
+      chatMessages.appendChild(item);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function updateOnlineUsers(userIds) {
+      onlineUserList.innerHTML = "";
+      if (!Array.isArray(userIds) || userIds.length === 0) {
+        const li = document.createElement("li");
+        li.textContent = "暂无在线用户";
+        onlineUserList.appendChild(li);
+        return;
+      }
+
+      userIds.forEach((id) => {
+        const li = document.createElement("li");
+        li.textContent = `用户 ${id}`;
+        onlineUserList.appendChild(li);
+      });
+    }
+
+    async function postJSON(url, data) {
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(data)
+      });
+
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || `请求失败: ${resp.status}`);
+      }
+
+      return resp.json();
+    }
+
+    async function register() {
+      const username = document.getElementById("registerUsername").value.trim();
+      const password = document.getElementById("registerPassword").value.trim();
+
+      if (!username || !password) {
+        appendMessage("注册失败：用户名和密码不能为空", "error");
+        return;
+      }
+
+      try {
+        const data = await postJSON(`${API_BASE}/register`, { username, password });
+        appendMessage(`注册成功，user_id=${data.user_id}`, "system");
+      } catch (err) {
+        appendMessage(`注册失败：${err.message}`, "error");
+      }
+    }
+
+    async function login() {
+      const username = document.getElementById("loginUsername").value.trim();
+      const password = document.getElementById("loginPassword").value.trim();
+
+      if (!username || !password) {
+        appendMessage("登录失败：用户名和密码不能为空", "error");
+        return;
+      }
+
+      try {
+        const data = await postJSON(`${API_BASE}/login`, { username, password });
+        currentUser = data;
+        setStatus(`已登录：${data.username}（user_id=${data.user_id}）`);
+        appendMessage("登录成功，开始连接 WebSocket", "system");
+        connectWebSocket(data.user_id);
+      } catch (err) {
+        appendMessage(`登录失败：${err.message}`, "error");
+      }
+    }
+
+    function connectWebSocket(userId) {
+      if (ws) {
+        ws.close();
+      }
+
+      ws = new WebSocket(`${WS_BASE}/ws?user_id=${userId}`);
+
+      ws.onopen = () => {
+        appendMessage("WebSocket 已连接", "system");
+        requestOnlineList();
+        startOnlineRefresh();
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+
+          switch (msg.type) {
+            case "chat":
+              appendMessage(`[私聊] ${msg.from_user_id}: ${msg.content}`);
+              break;
+            case "online_list":
+              updateOnlineUsers(Array.isArray(msg.data) ? msg.data : []);
+              break;
+            case "offline_list":
+              handleOfflineList(msg.data);
+              break;
+            default:
+              appendMessage(`收到未知消息类型：${event.data}`, "system");
+          }
+        } catch (err) {
+          appendMessage(`消息解析失败：${err.message}`, "error");
+        }
+      };
+
+      ws.onclose = () => {
+        appendMessage("WebSocket 已断开", "system");
+        stopOnlineRefresh();
+      };
+
+      ws.onerror = () => {
+        appendMessage("WebSocket 连接出错", "error");
+      };
+    }
+
+    function requestOnlineList() {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        return;
+      }
+      ws.send(JSON.stringify({ type: "get_online_list" }));
+    }
+
+    function startOnlineRefresh() {
+      stopOnlineRefresh();
+      onlineRefreshTimer = setInterval(requestOnlineList, 5000);
+    }
+
+    function stopOnlineRefresh() {
+      if (onlineRefreshTimer) {
+        clearInterval(onlineRefreshTimer);
+        onlineRefreshTimer = null;
+      }
+    }
+
+    function sendChatMessage() {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        appendMessage("请先登录并建立 WebSocket 连接", "error");
+        return;
+      }
+
+      const raw = messageInput.value.trim();
+      const match = raw.match(/^@(\d+)\s+([\s\S]+)$/);
+
+      if (!match) {
+        appendMessage("消息格式错误，请使用：@用户ID 内容", "error");
+        return;
+      }
+
+      const toUserId = Number(match[1]);
+      const content = match[2].trim();
+
+      if (!content) {
+        appendMessage("发送失败：消息内容不能为空", "error");
+        return;
+      }
+
+      ws.send(JSON.stringify({
+        type: "chat",
+        to_user_id: toUserId,
+        content
+      }));
+
+      appendMessage(`[私聊] ${toUserId}: ${content}`);
+      messageInput.value = "";
+    }
+
+    function fetchOfflineMessages() {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        appendMessage("请先登录并建立 WebSocket 连接", "error");
+        return;
+      }
+
+      ws.send(JSON.stringify({ type: "get_offline" }));
+    }
+
+    function handleOfflineList(list) {
+      if (!Array.isArray(list) || list.length === 0) {
+        appendMessage("没有离线消息", "system");
+        return;
+      }
+
+      list.forEach((item) => {
+        appendMessage(`[离线] ${item.from_user_id}: ${item.content}`);
+      });
+    }
+
+    document.getElementById("registerBtn").addEventListener("click", register);
+    document.getElementById("loginBtn").addEventListener("click", login);
+    document.getElementById("refreshOnlineBtn").addEventListener("click", requestOnlineList);
+    document.getElementById("sendBtn").addEventListener("click", sendChatMessage);
+    document.getElementById("offlineBtn").addEventListener("click", fetchOfflineMessages);
+
+    messageInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        sendChatMessage();
+      }
+    });
+  </script>
+</body>
+</html>
