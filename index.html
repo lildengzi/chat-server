@@ -281,6 +281,7 @@
 
     let ws = null;
     let currentUser = null;
+    let currentToken = "";
     let onlineRefreshTimer = null;
 
     const statusBox = document.getElementById("statusBox");
@@ -334,12 +335,18 @@
         body: JSON.stringify(data)
       });
 
-      if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(text || `请求失败: ${resp.status}`);
+      let payload = null;
+      try {
+        payload = await resp.json();
+      } catch (err) {
+        throw new Error(`响应解析失败: ${err.message}`);
       }
 
-      return resp.json();
+      if (!resp.ok || payload.code !== 0) {
+        throw new Error(payload.message || `请求失败: ${resp.status}`);
+      }
+
+      return payload.data;
     }
 
     async function register() {
@@ -371,20 +378,26 @@
       try {
         const data = await postJSON(`${API_BASE}/login`, { username, password });
         currentUser = data;
+        currentToken = data.token;
         setStatus(`已登录：${data.username}（user_id=${data.user_id}）`);
         appendMessage("登录成功，开始连接 WebSocket", "system");
-        connectWebSocket(data.user_id);
+        connectWebSocket(data.token);
       } catch (err) {
         appendMessage(`登录失败：${err.message}`, "error");
       }
     }
 
-    function connectWebSocket(userId) {
+    function connectWebSocket(token) {
       if (ws) {
         ws.close();
       }
 
-      ws = new WebSocket(`${WS_BASE}/ws?user_id=${userId}`);
+      if (!token) {
+        appendMessage("WebSocket 连接失败：缺少 token", "error");
+        return;
+      }
+
+      ws = new WebSocket(`${WS_BASE}/ws?token=${encodeURIComponent(token)}`);
 
       ws.onopen = () => {
         appendMessage("WebSocket 已连接", "system");
@@ -405,6 +418,9 @@
               break;
             case "offline_list":
               handleOfflineList(msg.data);
+              break;
+            case "error":
+              appendMessage(`服务端错误：${msg.content}`, "error");
               break;
             default:
               appendMessage(`收到未知消息类型：${event.data}`, "system");
