@@ -2,3 +2,50 @@ docs/
 chat-server.exe
 go.work
 .vscode
+.ssh/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.local
+*.secret
+*.secrets
+secrets/
+k8s/secret*.yaml
+
+# SSH keys, certificates, and kubeconfig files
+*.pem
+*.key
+*.crt
+*.csr
+id_rsa
+id_ed25519
+known_hosts
+kubeconfig
+kubeconfig.*
+*.kubeconfig
+.kube/
+
+# Runtime logs and local temp files
+*.log
+logs/
+tmp/
+temp/
+
+# Local database/data dumps
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.sql.gz
+
+# Local container build/export artifacts
+*.tar
+*.tar.gz
+*.tgz
+*.img
+
+# OS/editor noise
+.DS_Store
+Thumbs.db

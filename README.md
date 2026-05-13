@@ -1,8 +1,24 @@
 # Chat Server
 
-A personal learning project for building a small but complete chat backend with **Go, WebSocket, PostgreSQL, Redis, Docker Compose, and Nginx**.
+[![Go Tests](https://github.com/lildengzi/chat-server/actions/workflows/go-tests.yml/badge.svg)](https://github.com/lildengzi/chat-server/actions/workflows/go-tests.yml)
+![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)
+![WebSocket](https://img.shields.io/badge/WebSocket-enabled-4B5563)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-4169E1?logo=postgresql&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)
+![Docker Compose](https://img.shields.io/badge/Docker%20Compose-ready-2496ED?logo=docker&logoColor=white)
 
-This is not positioned as a production-ready IM system. The goal is to practice a realistic backend workflow: HTTP APIs, authentication, WebSocket connections, online state, cross-instance message delivery, offline message storage, containerized deployment, and a unified reverse-proxy entry point.
+A student-level cloud service learning project for building a small but complete chat backend with **Go, WebSocket, PostgreSQL, Redis, Docker Compose, and Nginx**.
+
+This is not positioned as a production-ready IM system, and it intentionally does not focus on complex security hardening yet. The goal is to understand the full path from local development to deployment on a cloud server, while practicing common backend and database operations: HTTP APIs, authentication, WebSocket connections, online state, cross-instance message delivery, offline message storage, containerized deployment, and a unified reverse-proxy entry point.
+
+Current learning scope:
+
+- Build and run a small microservice-style system on one cloud server
+- Use Docker Compose to orchestrate the application, PostgreSQL, Redis, and Nginx
+- Learn basic PostgreSQL table design, initialization, inserts, queries, and deletion of offline messages
+- Use Redis for online state and Pub/Sub between service instances
+- Use GitHub Actions for CI testing
+- Add CD next, so code pushed to GitHub can be deployed to the cloud server in a repeatable way
 
 Chinese version: [README.zh-CN.md](README.zh-CN.md)
 
@@ -129,10 +145,10 @@ You can run the Go service directly from the `chat-server` module if PostgreSQL 
 ```bash
 cd chat-server
 
-$env:DB_URL="postgres://postgres:123456@localhost:5432/chatdb?sslmode=disable"
+$env:DB_URL="postgres://postgres:chat_server_dev_password@localhost:5432/chatdb?sslmode=disable"
 $env:REDIS_ADDR="localhost:6379"
 $env:INSTANCE_ID="server-1"
-$env:JWT_SECRET="chat-server-local-dev-secret"
+$env:JWT_SECRET="chat_server_dev_jwt_secret"
 
 go run .
 ```
@@ -329,6 +345,165 @@ Tests are configured to run in GitHub Actions instead of being run locally by de
 The workflow is defined in `.github/workflows/go-tests.yml` and runs `go test ./...` from the `chat-server` module on pushes, pull requests, and manual workflow dispatches.
 
 Current tests cover basic JWT generation, parsing, and invalid token rejection.
+
+## Deployment and CD
+
+The project can already be deployed manually on a cloud server with Docker Compose:
+
+```bash
+git pull
+docker compose up -d --build
+```
+
+CD is the next missing step. For this learning project, the recommended simple path is:
+
+1. Keep the project repository on the cloud server.
+2. Let GitHub Actions run tests first.
+3. After tests pass, use a GitHub Actions deployment job to SSH into the cloud server.
+4. Run `git pull` and `docker compose up -d --build` on the server.
+
+This is easier to understand than introducing an image registry immediately. Avoid making the cloud server continuously poll GitHub and pull automatically. A server-side pull is acceptable as the deployment command, but it should be triggered by CI/CD, or run manually, so deployment timing and logs are visible.
+
+For a more standard later version, build a Docker image in GitHub Actions, push it to a registry, and let the server pull the image and restart Compose.
+
+This repository includes `.github/workflows/k3s-deploy.yml` for the simple K3s CD path. Configure these GitHub repository secrets:
+
+| Name | Description |
+| --- | --- |
+| `SERVER_HOST` | Cloud server public IP or domain. |
+| `SERVER_USER` | SSH username. |
+| `SERVER_SSH_KEY` | Private SSH key used by GitHub Actions to log in to the server. |
+| `SERVER_PORT` | Optional SSH port. Defaults to `22` if omitted. |
+| `SUDO_PASSWORD` | Optional sudo password. Prefer passwordless sudo for the deploy user and leave this unset. |
+| `DEPLOY_PATH` | Optional deployment directory on the cloud server. If omitted, the workflow uses `$HOME/chat-server`. |
+
+Generate a deployment key locally:
+
+```bash
+ssh-keygen -t ed25519 -C "chat-server-deploy" -f ~/.ssh/chat_server_deploy
+```
+
+Install the public key on the server:
+
+```bash
+ssh-copy-id -i ~/.ssh/chat_server_deploy.pub <server-user>@<server-host>
+```
+
+Add the private key content to GitHub Secrets:
+
+```bash
+cat ~/.ssh/chat_server_deploy
+```
+
+Use the output as the value of `SERVER_SSH_KEY`.
+
+After key login works, disable SSH password login on the server:
+
+```text
+PasswordAuthentication no
+PermitRootLogin no
+PubkeyAuthentication yes
+```
+
+Then restart SSH:
+
+```bash
+sudo systemctl restart ssh
+```
+
+If the deploy user still needs a password for `sudo`, either configure passwordless sudo for the learning server or add `SUDO_PASSWORD` as a temporary GitHub Secret.
+
+For passwordless sudo, create a sudoers file on the server:
+
+```bash
+sudo visudo -f /etc/sudoers.d/chat-server-deploy
+```
+
+Add:
+
+```text
+<server-user> ALL=(ALL) NOPASSWD:ALL
+```
+
+Then verify:
+
+```bash
+sudo -n true
+```
+
+If it succeeds, GitHub Actions can deploy without storing a server password.
+
+The workflow runs Go tests first. If tests pass, it SSHs into the server, clones or updates the repository, and runs:
+
+```bash
+bash scripts/k3s-deploy.sh
+```
+
+## K3s Deployment
+
+This repository also includes a simple K3s deployment path for learning Kubernetes concepts with a lighter single-node cluster.
+
+The K3s manifests are in `k8s/`:
+
+- `postgres.yaml`: PostgreSQL with a PVC
+- `redis.yaml`: Redis single instance
+- `chat-server.yaml`: two Go service replicas behind a Kubernetes Service
+- `web.yaml`: Nginx serving `index.html`
+- `ingress.yaml`: K3s Traefik Ingress for `/`, `/register`, `/login`, and `/ws`
+- Runtime Kubernetes Secret: generated by `scripts/k3s-deploy.sh`, not committed to the repository
+
+On a fresh cloud server, clone the repository and run:
+
+```bash
+bash scripts/k3s-deploy.sh
+```
+
+The script will:
+
+1. Install K3s if it is not already installed.
+2. Install Docker if it is not already installed.
+3. Build the local `chat-server:local` image with Docker.
+4. Import the image into K3s containerd.
+5. Create a Kubernetes Secret from environment variables or learning defaults.
+6. Create ConfigMaps from `init.sql` and `index.html`.
+7. Apply the Kubernetes manifests.
+8. Wait for PostgreSQL, Redis, chat-server, and web deployments to become ready.
+
+Prerequisites on the server:
+
+- Linux cloud server
+- `curl`
+- `sudo`, unless running as root
+
+If the Docker Compose version is already running on the same server, stop it first because it may already be using port `80`:
+
+```bash
+docker compose down
+```
+
+After deployment, open:
+
+```text
+http://<server-public-ip>/
+```
+
+Useful commands:
+
+```bash
+sudo k3s kubectl -n chat-server get pods
+sudo k3s kubectl -n chat-server logs deploy/chat-server
+sudo k3s kubectl -n chat-server describe pod <pod-name>
+```
+
+If you already have an image in a registry, skip the local build by passing `IMAGE`:
+
+```bash
+IMAGE=ghcr.io/<user>/<image>:<tag> bash scripts/k3s-deploy.sh
+```
+
+In that mode, Docker is not required on the server.
+
+For public repositories, do not commit real server addresses, SSH usernames, passwords, kubeconfig files, or production `.env` files. This project keeps deployment credentials in GitHub Secrets and generates the K3s Secret at deploy time.
 
 ## Notes
 

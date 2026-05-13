@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_DB: chatdb
-      POSTGRES_PASSWORD: "123456"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chat_server_dev_password}
     volumes:
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
       - pg_data:/var/lib/postgresql/data
@@ -34,10 +34,10 @@ services:
     build: ./chat-server
     restart: unless-stopped
     environment:
-      DB_URL: postgres://postgres:123456@postgres:5432/chatdb?sslmode=disable
+      DB_URL: postgres://postgres:${POSTGRES_PASSWORD:-chat_server_dev_password}@postgres:5432/chatdb?sslmode=disable
       REDIS_ADDR: redis:6379
       INSTANCE_ID: server-1
-      JWT_SECRET: chat-server-local-dev-secret
+      JWT_SECRET: ${JWT_SECRET:-chat_server_dev_jwt_secret}
     expose:
       - "8080"
     depends_on:
@@ -52,10 +52,10 @@ services:
     build: ./chat-server
     restart: unless-stopped
     environment:
-      DB_URL: postgres://postgres:123456@postgres:5432/chatdb?sslmode=disable
+      DB_URL: postgres://postgres:${POSTGRES_PASSWORD:-chat_server_dev_password}@postgres:5432/chatdb?sslmode=disable
       REDIS_ADDR: redis:6379
       INSTANCE_ID: server-2
-      JWT_SECRET: chat-server-local-dev-secret
+      JWT_SECRET: ${JWT_SECRET:-chat_server_dev_jwt_secret}
     expose:
       - "8080"
     depends_on:

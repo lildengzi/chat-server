@@ -1,0 +1,90 @@
+name: Deploy to K3s
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: k3s-deploy
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Run Go tests
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: chat-server
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: chat-server/go.mod
+          cache-dependency-path: chat-server/go.sum
+
+      - name: Run tests
+        run: go test ./...
+
+  deploy:
+    name: Deploy on cloud server
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Deploy with SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          REPO_URL: https://github.com/${{ github.repository }}.git
+          DEPLOY_BRANCH: ${{ github.ref_name }}
+          SUDO_PASSWORD: ${{ secrets.SUDO_PASSWORD }}
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          envs: DEPLOY_PATH,REPO_URL,DEPLOY_BRANCH,SUDO_PASSWORD
+          script: |
+            set -euo pipefail
+
+            if command -v sudo >/dev/null 2>&1; then
+              if [ -n "${SUDO_PASSWORD:-}" ]; then
+                printf '%s\n' "$SUDO_PASSWORD" | sudo -S -v
+              else
+                sudo -n -v
+              fi
+            fi
+
+            if ! command -v git >/dev/null 2>&1; then
+              if command -v apt-get >/dev/null 2>&1; then
+                sudo apt-get update
+                sudo apt-get install -y git
+              elif command -v yum >/dev/null 2>&1; then
+                sudo yum install -y git
+              else
+                echo "git is required but no supported package manager was found" >&2
+                exit 1
+              fi
+            fi
+
+            DEPLOY_PATH="${DEPLOY_PATH:-$HOME/chat-server}"
+
+            if [ -d "$DEPLOY_PATH/.git" ]; then
+              cd "$DEPLOY_PATH"
+              git fetch origin "$DEPLOY_BRANCH"
+              git checkout "$DEPLOY_BRANCH"
+              git pull --ff-only origin "$DEPLOY_BRANCH"
+            else
+              git clone --branch "$DEPLOY_BRANCH" "$REPO_URL" "$DEPLOY_PATH"
+              cd "$DEPLOY_PATH"
+            fi
+
+            bash scripts/k3s-deploy.sh
